@@ -70,17 +70,40 @@ def parse_xml(path):
     return stem, w, h, objs
 
 
-def find_split_dir(root, key):
-    """Locate e.g. 'Training' / 'Test_1' folder regardless of prefix/case."""
-    key_l = key.lower()
-    # Search recursively (zips sometimes nest UATD_Training/UATD_Training/...),
-    # preferring the shallowest folder that holds image/ and annotation/.
-    cands = [p for p in Path(root).rglob('*')
-             if p.is_dir() and p.name.lower().endswith(key_l)
-             and (p / 'image').is_dir() and (p / 'annotation').is_dir()]
-    if cands:
-        return min(cands, key=lambda p: len(p.parts))
-    raise FileNotFoundError(f'No folder ending in "{key}" with image/ and annotation/ under {root}')
+def _norm(s):
+    return ''.join(ch for ch in s.lower() if ch.isalnum())
+
+
+def _count(d, exts):
+    return sum(1 for p in d.iterdir() if p.is_file() and p.suffix.lower() in exts)
+
+
+def find_split_dirs(root, key):
+    """Return (image_dir, annotation_dir) for a split such as 'Training' or 'Test_1'.
+
+    Folder names inside the UATD zips are not fixed (image/images/Image,
+    nested UATD_Training/UATD_Training/..., or no split folder at all when each
+    zip was extracted to its own folder), so we search by CONTENT: under every
+    folder whose name contains the split key, take the sub-folder holding the
+    most .xml files as annotations and the one holding the most images as images.
+    """
+    k = _norm(key)
+    root = Path(root)
+    best = None
+    for cand in [root] + [p for p in root.rglob('*') if p.is_dir()]:
+        if k not in _norm(cand.name):
+            continue
+        dirs = [cand] + [p for p in cand.rglob('*') if p.is_dir()]
+        ann = max(dirs, key=lambda d: _count(d, ('.xml',)))
+        img = max(dirs, key=lambda d: _count(d, IMG_EXTS))
+        n_xml, n_img = _count(ann, ('.xml',)), _count(img, IMG_EXTS)
+        if n_xml and n_img and (best is None or n_xml > best[2] or
+                                (n_xml == best[2] and len(cand.parts) < best[3])):
+            best = (img, ann, n_xml, len(cand.parts))
+    if best:
+        return best[0], best[1]
+    raise FileNotFoundError(
+        f'No folder whose name contains "{key}" with images and .xml files under {root}')
 
 
 def image_size(path):
@@ -110,11 +133,7 @@ def write_png(src, dst_dir):
     return dst, False
 
 
-def convert_split(split_dir, out_img_dir, cat2id, copy=False, strict=False, to_png=False):
-    ann_dir = split_dir / 'annotation'
-    img_dir = split_dir / 'image'
-    if not ann_dir.is_dir() or not img_dir.is_dir():
-        raise FileNotFoundError(f'{split_dir} must contain image/ and annotation/')
+def convert_split(img_dir, ann_dir, out_img_dir, cat2id, copy=False, strict=False, to_png=False):
     imgs_by_stem = {p.stem: p for p in img_dir.iterdir()
                     if p.suffix.lower() in IMG_EXTS}
     out_img_dir.mkdir(parents=True, exist_ok=True)
@@ -186,8 +205,10 @@ def main(argv=None):
     results = {}
     # Train first so category ids are defined by the training set.
     for split, key in (('train', a.train_split), ('val', a.val_split), ('test', a.test_split)):
-        d = find_split_dir(a.uatd_root, key)
-        images, anns, missing = convert_split(d, out / split, cat2id, a.copy, a.strict, a.to_png)
+        img_dir, ann_dir = find_split_dirs(a.uatd_root, key)
+        print(f'{split:5s}: images {img_dir}  annotations {ann_dir}')
+        d = img_dir.parent
+        images, anns, missing = convert_split(img_dir, ann_dir, out / split, cat2id, a.copy, a.strict, a.to_png)
         results[split] = (images, anns)
         print(f'{split:5s} <- {d.name}: {len(images)} images, {len(anns)} boxes'
               + (f', {missing} XML without image (skipped)' if missing else ''))

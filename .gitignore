@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+work_dirs/
+runs/
+data/
+*.pth
+results.csv

@@ -1,0 +1,19 @@
+method,dataset,pct,metric,value,source
+sup,uatd,1,mAP,13.7,RSOD AAAI 2026 Table 1
+sup,uatd,5,mAP,22.9,RSOD AAAI 2026 Table 1
+sup,uatd,10,mAP,26.2,RSOD AAAI 2026 Table 1
+rsod,uatd,1,mAP,23.2,RSOD AAAI 2026 Table 1
+rsod,uatd,5,mAP,34.7,RSOD AAAI 2026 Table 1
+rsod,uatd,10,mAP,34.8,RSOD AAAI 2026 Table 1
+sup,fsod,5,mAP,44.9,RSOD AAAI 2026 Table 1
+sup,fsod,10,mAP,50.6,RSOD AAAI 2026 Table 1
+sup,fsod,20,mAP,59.6,RSOD AAAI 2026 Table 1
+rsod,fsod,5,mAP,67.4,RSOD AAAI 2026 Table 1
+rsod,fsod,10,mAP,72.6,RSOD AAAI 2026 Table 1
+rsod,fsod,20,mAP,75.5,RSOD AAAI 2026 Table 1
+sup,uatd,1,mAP_small,2.9,RSOD AAAI 2026 Table 2
+sup,uatd,5,mAP_small,7.1,RSOD AAAI 2026 Table 2
+sup,uatd,10,mAP_small,7.3,RSOD AAAI 2026 Table 2
+rsod,uatd,1,mAP_small,10.1,RSOD AAAI 2026 Table 2
+rsod,uatd,5,mAP_small,12.6,RSOD AAAI 2026 Table 2
+rsod,uatd,10,mAP_small,12.8,RSOD AAAI 2026 Table 2

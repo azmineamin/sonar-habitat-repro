@@ -14,6 +14,13 @@ ls "$RSOD"/projects/RSOD/configs/repro/*_uatd_*pct_seed*.py >/dev/null 2>&1 || {
 export PATH="$VENV/bin:$PATH" PYTHONUNBUFFERED=1
 # Colab sets MPLBACKEND to its notebook backend, which the 3.10 venv does not have.
 export MPLBACKEND=Agg
+if [ -n "${WANDB_PROJECT:-}" ]; then
+  [ -n "${WANDB_API_KEY:-}" ] || { echo "ERROR: WANDB_PROJECT is set but WANDB_API_KEY is not - run the Forge cell (add the Colab secret WANDB_API_KEY)"; exit 1; }
+  "$VENV/bin/python" -c "import wandb" 2>/dev/null || uv pip install -q --python "$VENV/bin/python" wandb
+  echo "logging to CoreWeave Forge (W&B): project=$WANDB_PROJECT entity=${WANDB_ENTITY:-<your default>}"
+else
+  echo "W&B / Forge logging off (run the Forge cell to turn it on)"
+fi
 export WORK_ROOT="$DRIVE_ROOT/work_dirs"
 mkdir -p "$WORK_ROOT"
 echo "python: $(command -v python)  | data: $UATD_DATA_ROOT  | runs: $WORK_ROOT"

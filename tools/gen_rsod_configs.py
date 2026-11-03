@@ -43,6 +43,33 @@ def dataset_config(src_text, classes, env_var, default_root):
     return t
 
 
+def wandb_block(method, dataset, pct, seed):
+    """Optional logging to Weights & Biases / CoreWeave Forge (W&B Models).
+    Active only when WANDB_PROJECT is set in the environment; otherwise the
+    config is exactly as before. Run name / id come from WANDB_NAME / WANDB_RUN_ID
+    (set per run by scripts/run_uatd.sh) so a resumed run continues the same W&B run."""
+    name = f'{method}_{dataset}_{pct}pct_seed{seed}'
+    return f"""
+# ---- optional: log to W&B / CoreWeave Forge when WANDB_PROJECT is set ----
+import os
+if os.getenv('WANDB_PROJECT'):
+    visualizer = dict(
+        type='DetLocalVisualizer', name='visualizer',
+        vis_backends=[
+            dict(type='LocalVisBackend'),
+            dict(type='WandbVisBackend',
+                 init_kwargs=dict(project=os.environ['WANDB_PROJECT'],
+                                  entity=os.getenv('WANDB_ENTITY') or None,
+                                  name=os.getenv('WANDB_NAME', '{name}'),
+                                  id=os.getenv('WANDB_RUN_ID') or None,
+                                  resume='allow',
+                                  job_type=os.getenv('WANDB_JOB_TYPE', 'train'),
+                                  group='{method}_{dataset}_{pct}pct',
+                                  tags=['{method}', '{dataset}', '{pct}pct', 'seed{seed}']),
+                 define_metric_cfg={{'coco/bbox_mAP': 'max', 'teacher/coco/bbox_mAP': 'max'}}),
+        ])
+"""
+
 def rsod_config(src_text, ds_file, pct, seed, num_classes):
     t = src_text
     t = t.replace("'../../../configs/_base_/", "'../../../../configs/_base_/")
@@ -61,6 +88,7 @@ default_hooks = dict(checkpoint=dict(type='CheckpointHook', interval=20000, by_e
                                      max_keep_ckpts=2, save_best='teacher/coco/bbox_mAP',
                                      rule='greater'))
 """
+    t += wandb_block('rsod', ds_file.split('_')[0], pct, seed)
     return t
 
 
@@ -156,7 +184,8 @@ def main(argv=None):
             (out_dir / name).write_text(rsod_config(model_src, ds_file, tag, s, len(classes)))
             sup = f'sup_{a.dataset}_{tag}pct_seed{s}.py'
             (out_dir / sup).write_text(SUP_TEMPLATE.format(ds_file=ds_file, pct=tag, seed=s,
-                                                           num_classes=len(classes)))
+                                                           num_classes=len(classes))
+                                       + wandb_block('sup', a.dataset, tag, s))
             written += [name, sup]
     print(f'{len(classes)} classes: {classes}')
     print(f'wrote {len(written)} files to {out_dir}')

@@ -34,11 +34,15 @@ for pct in $PCTS; do
       wd=$WORK_ROOT/$name
       if [ -f "$wd/DONE" ]; then echo "=== $name already done, skipping"; continue; fi
       echo "=== train $name  ($(date))"
-      python tools/train.py "$cfg" --work-dir "$wd" "${extra[@]}"
+      # W&B / CoreWeave Forge (used only if WANDB_PROJECT is set): a fixed run id per
+      # setting means a run resumed after a disconnect continues the same W&B run.
+      WANDB_NAME=$name WANDB_RUN_ID=$name WANDB_JOB_TYPE=train \
+        python tools/train.py "$cfg" --work-dir "$wd" "${extra[@]}"
       ckpt=$(ls -t "$wd"/best_*.pth 2>/dev/null | head -1 || true)
       if [ -z "$ckpt" ]; then ckpt=$(cat "$wd/last_checkpoint"); fi
       echo "=== test $name with $(basename "$ckpt")"
-      python tools/test.py "$cfg" "$ckpt" --work-dir "$wd" "${extra[@]}"
+      WANDB_NAME=${name}-test WANDB_RUN_ID=${name}-test WANDB_JOB_TYPE=eval \
+        python tools/test.py "$cfg" "$ckpt" --work-dir "$wd" "${extra[@]}"
       date > "$wd/DONE"
     done
   done

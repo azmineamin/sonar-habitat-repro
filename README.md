@@ -27,6 +27,25 @@ Open `colab/RSOD_reproduction_colab.ipynb` in Colab (File → Open notebook → 
 - Checkpoints and logs go to Drive. After a disconnect, run all cells again: training resumes from the last checkpoint, and finished runs are skipped.
 - Drive space: each RSOD checkpoint holds teacher + student weights, so keep a few GB free per run.
 
+### Viewing results in CoreWeave Forge (W&B Models)
+
+Logging is optional and off by default. To turn it on:
+1. Sign up or log in at https://id.coreweave.com/signup and copy your API key (User settings → API keys).
+2. In Colab, add a secret named `WANDB_API_KEY` with that key (key icon in the left bar; allow notebook access).
+3. Run cell **5b** before training. Set `FORGE_PROJECT` there (default `sonar-habitat-repro`) and optionally `FORGE_ENTITY`.
+
+Then:
+- **Each training run** (cell 6) appears as its own run: loss, learning rate and validation mAP curves, plus the full config.
+  Runs are grouped by setting (`rsod_uatd_5pct`, `sup_uatd_5pct`, …) and tagged with method, label % and seed.
+  A run resumed after a disconnect continues the same Forge run, because its id is fixed.
+- **Each test** appears as a `<run>-test` run (job type `eval`) with the test-set COCO metrics.
+- **Cell 8** uploads a `results-summary` run with the table "ours vs. paper" (mean ± std over seeds),
+  a per-run table, and an "ours vs. paper" bar chart for full-schedule runs.
+
+Project URL: `https://forge.coreweave.com/wandb/<entity>/<project>`.
+Under the hood this is the standard `wandb` library (MMEngine's `WandbVisBackend`); Forge serves the W&B app,
+and the `api.wandb.ai` endpoint keeps working, so nothing else needs configuring.
+
 ## What you need (own machine)
 
 - An **NVIDIA GPU** (the authors used one RTX 4090; each run is 180k iterations).

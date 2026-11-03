@@ -21,7 +21,8 @@ echo "[4/6] mmcv 2.1.0 (prebuilt CUDA ops)"
 uv pip install -q --python $P mmcv==2.1.0 -f https://download.openmmlab.com/mmcv/dist/cu118/torch2.0/index.html
 echo "[5/6] RSOD runtime requirements"
 uv pip install -q --python $P -r "$RSOD/requirements/runtime.txt"
-echo "[6/6] RSOD (editable)"
+echo "[6/6] RSOD (editable) + wandb (for CoreWeave Forge logging)"
+uv pip install -q --python $P wandb
 uv pip install -q --python $P --no-build-isolation -e "$RSOD"
 # Some installs above can upgrade setuptools again; re-assert the pin.
 uv pip install -q --python $P "setuptools==69.5.1"

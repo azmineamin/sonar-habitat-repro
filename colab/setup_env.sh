@@ -26,8 +26,9 @@ uv pip install -q --python $P --no-build-isolation -e "$RSOD"
 # Some installs above can upgrade setuptools again; re-assert the pin.
 uv pip install -q --python $P "setuptools==69.5.1"
 
-$P - <<'EOF'
+MPLBACKEND=Agg $P - <<'EOF'
 import torch, mmcv, mmengine, mmdet, setuptools
+import mmdet.utils  # imports matplotlib too, as tools/train.py does
 from mmcv.ops import RoIAlign, nms  # fails here if mmcv was not built with CUDA ops
 print('torch', torch.__version__, '| CUDA available:', torch.cuda.is_available(),
       '| mmcv', mmcv.__version__, '| mmengine', mmengine.__version__, '| mmdet', mmdet.__version__,

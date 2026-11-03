@@ -12,6 +12,8 @@ RSOD=${RSOD:-/content/RSOD}
 ls "$RSOD"/projects/RSOD/configs/repro/*_uatd_*pct_seed*.py >/dev/null 2>&1 || { echo "ERROR: configs missing - run cell 5"; exit 1; }
 
 export PATH="$VENV/bin:$PATH" PYTHONUNBUFFERED=1
+# Colab sets MPLBACKEND to its notebook backend, which the 3.10 venv does not have.
+export MPLBACKEND=Agg
 export WORK_ROOT="$DRIVE_ROOT/work_dirs"
 mkdir -p "$WORK_ROOT"
 echo "python: $(command -v python)  | data: $UATD_DATA_ROOT  | runs: $WORK_ROOT"

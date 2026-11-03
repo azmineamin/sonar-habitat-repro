@@ -6,6 +6,9 @@ set -euo pipefail
 : "${DRIVE_ROOT:?run cell 0 (settings) first}"
 VENV=${VENV:-/content/venv310}
 PY=python3; [ -x "$VENV/bin/python" ] && PY=$VENV/bin/python
+# Colab's own Python (e.g. wandb.login() in the Forge cell) starts a wandb-core service and
+# exports WANDB_SERVICE; the 3.10 venv runs a different wandb version and must use its own.
+unset WANDB_SERVICE
 args=(--work-root "$DRIVE_ROOT/work_dirs" --out "$DRIVE_ROOT/results.csv")
 if [ -n "${WANDB_PROJECT:-}" ]; then
   export WANDB_X_DISABLE_STATS=true

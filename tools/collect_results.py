@@ -54,12 +54,20 @@ def main(argv=None):
     if not Path(a.work_root).is_dir():
         raise SystemExit(f'No runs found: {a.work_root} does not exist. Training has not started '
                          '(or failed before its first log); check the output of the training cell.')
+    pending = []
     for d in sorted(Path(a.work_root).iterdir()):
         m = NAME_RE.search(d.name)
         if not d.is_dir() or not m:
             continue
         met = last_test_metrics(d.rglob('*.log'))
         if not met:
+            state = 'checkpoint saved, test not run yet' if (d / 'last_checkpoint').exists() else 'no checkpoint yet'
+            if (d / 'last_checkpoint').exists():
+                try:
+                    state += f" (last checkpoint: {Path((d / 'last_checkpoint').read_text().strip()).name})"
+                except OSError:
+                    pass
+            pending.append((d.name, state))
             continue
         get = lambda k: next((float(v) for kk, v in met.items() if kk.endswith(k)), None)
         mAP, mAP50, mAPs = get('coco/bbox_mAP'), get('coco/bbox_mAP_50'), get('coco/bbox_mAP_s')
@@ -102,6 +110,13 @@ def main(argv=None):
     if any(r['iters'] != FULL for r in rows):
         print('\nRows marked "(N it)" used a shortened schedule: they test the pipeline and are '
               'NOT comparable with the paper (diff left blank).')
+    if pending:
+        print('\nRuns without test results yet (re-run the training cell to resume them):')
+        for name, state in pending:
+            print(f'  {name}: {state}')
+    if not rows:
+        print('\nNo finished runs with test results yet - nothing to compare or upload.')
+        return
     if a.wandb:
         log_to_wandb(summary, rows)
     print(f'\nper-run rows written to {a.out}')

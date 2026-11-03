@@ -14,6 +14,9 @@ ls "$RSOD"/projects/RSOD/configs/repro/*_uatd_*pct_seed*.py >/dev/null 2>&1 || {
 export PATH="$VENV/bin:$PATH" PYTHONUNBUFFERED=1
 # Colab sets MPLBACKEND to its notebook backend, which the 3.10 venv does not have.
 export MPLBACKEND=Agg
+# Colab's own Python (e.g. wandb.login() in the Forge cell) starts a wandb-core service and
+# exports WANDB_SERVICE; the 3.10 venv runs a different wandb version and must use its own.
+unset WANDB_SERVICE
 if [ -n "${WANDB_PROJECT:-}" ]; then
   # Accept either the WANDB_API_KEY secret or an earlier `wandb.login()` (stored in ~/.netrc).
   if [ -z "${WANDB_API_KEY:-}" ] && ! grep -qs "api.wandb.ai" "$HOME/.netrc"; then

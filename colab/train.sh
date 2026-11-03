@@ -15,7 +15,10 @@ export PATH="$VENV/bin:$PATH" PYTHONUNBUFFERED=1
 # Colab sets MPLBACKEND to its notebook backend, which the 3.10 venv does not have.
 export MPLBACKEND=Agg
 if [ -n "${WANDB_PROJECT:-}" ]; then
-  [ -n "${WANDB_API_KEY:-}" ] || { echo "ERROR: WANDB_PROJECT is set but WANDB_API_KEY is not - run the Forge cell (add the Colab secret WANDB_API_KEY)"; exit 1; }
+  # Accept either the WANDB_API_KEY secret or an earlier `wandb.login()` (stored in ~/.netrc).
+  if [ -z "${WANDB_API_KEY:-}" ] && ! grep -qs "api.wandb.ai" "$HOME/.netrc"; then
+    echo "ERROR: not logged in to W&B/Forge - add the Colab secret WANDB_API_KEY, or run wandb.login() in a cell"; exit 1
+  fi
   "$VENV/bin/python" -c "import wandb" 2>/dev/null || uv pip install -q --python "$VENV/bin/python" wandb
   echo "logging to CoreWeave Forge (W&B): project=$WANDB_PROJECT entity=${WANDB_ENTITY:-<your default>}"
 else

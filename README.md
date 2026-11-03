@@ -32,7 +32,7 @@ Open `colab/RSOD_reproduction_colab.ipynb` in Colab (File → Open notebook → 
 Logging is optional and off by default. To turn it on:
 1. Sign up or log in at https://id.coreweave.com/signup and copy your API key (User settings → API keys).
 2. In Colab, add a secret named `WANDB_API_KEY` with that key (key icon in the left bar; allow notebook access).
-3. Run cell **5b** before training. Set `FORGE_PROJECT` there (default `sonar-habitat-repro`) and optionally `FORGE_ENTITY`.
+3. Run cell **5b** before training. Set `FORGE_PROJECT` there (default `sonar-habitat-repro`) and optionally `FORGE_ENTITY` (our team: `walidur-rahman01-north-south-university`). Instead of the secret you can also run `wandb.login()` in a cell.
 
 Then:
 - **Each training run** (cell 6) appears as its own run: loss, learning rate and validation mAP curves, plus the full config.

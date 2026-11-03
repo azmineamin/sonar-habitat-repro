@@ -5,8 +5,10 @@ label splits, and copy everything to fast local disk. Called by notebook cell 4.
 Safe to re-run:
   * downloads resume (wget -c) and are size-checked against figshare;
   * each zip is extracted into its own folder, once;
+  * conversion runs on fast local disk; the result is stored on Drive as ONE tar
+    file (thousands of small files can be left half-uploaded by a disconnect);
   * raw files are deleted ONLY after the conversion succeeded;
-  * finished steps are skipped.
+  * finished steps are skipped; later sessions just unpack the tar.
 """
 import argparse
 import json
@@ -14,6 +16,7 @@ import os
 import shutil
 import subprocess
 import sys
+import tarfile
 import urllib.request
 import zipfile
 from pathlib import Path
@@ -68,35 +71,90 @@ def download(raw):
     return ext
 
 
+def is_complete(root):
+    """True if root holds train/val/test json files and every listed image."""
+    try:
+        for split in ('train', 'val', 'test'):
+            d = json.loads((root / 'annotations' / f'instances_{split}.json').read_text())
+            have = {p.name for p in (root / split).iterdir()}
+            if not d['images'] or any(im['file_name'] not in have for im in d['images']):
+                return False
+        return True
+    except (OSError, ValueError, KeyError):
+        return False
+
+
+def save_archive(local, archive):
+    """Store the converted dataset on Drive as ONE uncompressed tar (PNGs are already
+    compressed). One large file uploads to Drive far more reliably than ~9,200 small
+    ones, which a disconnect can leave half-synced."""
+    tmp = archive.with_suffix('.tar.partial')
+    print(f'  writing {archive} (one file, uploads reliably)', flush=True)
+    with tarfile.open(tmp, 'w') as tf:
+        tf.add(local, arcname=local.name)
+    with open(tmp, 'rb+') as f:
+        os.fsync(f.fileno())
+    tmp.replace(archive)
+    ok = archive.with_name(archive.name + '.ok')
+    ok.write_text(str(archive.stat().st_size))
+    print(f'  saved {archive.stat().st_size / 1e9:.2f} GB to Drive')
+
+
+def archive_ok(archive):
+    ok = archive.with_name(archive.name + '.ok')
+    try:
+        return archive.exists() and int(ok.read_text()) == archive.stat().st_size
+    except (OSError, ValueError):
+        return False
+
+
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument('--drive-data', required=True, help='e.g. /content/drive/MyDrive/sonar-habitat/data/uatd_coco')
+    ap.add_argument('--drive-data', required=True,
+                    help='e.g. /content/drive/MyDrive/sonar-habitat/data/uatd_coco; the archive is '
+                         'stored next to it as uatd_coco.tar')
     ap.add_argument('--local-data', default='/content/data/uatd_coco')
     ap.add_argument('--raw', default='/content/uatd_raw')
     ap.add_argument('--pcts', nargs='+', default=['5'])
     ap.add_argument('--seeds', nargs='+', default=['1'])
     a = ap.parse_args()
     drive, local, raw = Path(a.drive_data), Path(a.local_data), Path(a.raw)
-    ann = drive / 'annotations'
+    archive = drive.parent / (drive.name + '.tar')
+    archive.parent.mkdir(parents=True, exist_ok=True)
 
-    # 1. download + convert (once)
-    if not (ann / 'instances_test.json').exists():
-        print('[1/3] downloading UATD from figshare (first time only)')
+    # 1. get the converted dataset onto local disk
+    if is_complete(local):
+        print('[1/3] dataset already on local disk')
+    elif archive_ok(archive):
+        print(f'[1/3] unpacking {archive} from Drive to local disk')
+        local.parent.mkdir(parents=True, exist_ok=True)
+        with tarfile.open(archive) as tf:
+            tf.extractall(local.parent)
+    elif is_complete(drive):  # older kit versions wrote loose files to Drive
+        print('[1/3] copying loose dataset folder from Drive')
+        shutil.copytree(drive, local, dirs_exist_ok=True)
+        save_archive(local, archive)
+    else:
+        print('[1/3] downloading UATD from figshare (no complete copy on Drive)')
         ext = download(raw)
         print('  extracted layout:')
         show_tree(ext)
-        print('[1/3] converting to lossless PNG + COCO on Drive')
+        print('[1/3] converting to lossless PNG + COCO on local disk', flush=True)
         try:
             sh([sys.executable, KIT / 'tools' / 'uatd_to_coco.py', '--uatd-root', ext,
-                '--out', drive, '--to-png'])
+                '--out', local, '--to-png'])
         except subprocess.CalledProcessError:
             sys.exit('Conversion failed. Raw files are KEPT in ' + str(raw) +
                      '; paste the layout above and the error so the converter can be fixed.')
+        if not is_complete(local):
+            sys.exit('Converted dataset is incomplete; raw files kept in ' + str(raw))
+        save_archive(local, archive)
         shutil.rmtree(raw)
-    else:
-        print('[1/3] dataset already on Drive, skipping download')
+    if not is_complete(local):
+        sys.exit(f'{local} is incomplete. Delete {archive} and re-run to rebuild it.')
 
-    # 2. label splits (once per pct/seed)
+    # 2. label splits: deterministic (fixed seeds), so they are simply re-made locally
+    ann = local / 'annotations'
     need = [p for p in a.pcts for s in a.seeds if not (ann / f'instances_{p}train_seed{s}.json').exists()]
     if need:
         print('[2/3] making label splits')
@@ -105,23 +163,14 @@ def main():
     else:
         print('[2/3] label splits already exist')
 
-    # 3. copy to local disk (training reads thousands of images; Drive is slow)
-    print('[3/3] syncing to local disk', local)
-    local.mkdir(parents=True, exist_ok=True)
-    copied = 0
-    for src in drive.rglob('*'):
-        dst = local / src.relative_to(drive)
-        if src.is_dir():
-            dst.mkdir(parents=True, exist_ok=True)
-        elif not dst.exists() or dst.stat().st_size != src.stat().st_size or src.suffix == '.json':
-            shutil.copy2(src, dst)
-            copied += 1
-    print(f'  copied {copied} new/changed files')
+    # 3. report
+    print('[3/3] checking', local)
     for split in ('train', 'val', 'test'):
-        d = json.loads((local / 'annotations' / f'instances_{split}.json').read_text())
+        d = json.loads((ann / f'instances_{split}.json').read_text())
         n_files = sum(1 for _ in (local / split).iterdir())
         print(f'  {split}: {len(d["images"])} images in json, {n_files} files on disk, {len(d["annotations"])} boxes')
     print('classes:', [c['name'] for c in d['categories']])
+    print('Drive copy:', archive, 'OK' if archive_ok(archive) else 'MISSING')
     print('READY  UATD_DATA_ROOT =', local)
 
 

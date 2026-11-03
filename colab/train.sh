@@ -20,7 +20,9 @@ if [ -n "${WANDB_PROJECT:-}" ]; then
     echo "ERROR: not logged in to W&B/Forge - add the Colab secret WANDB_API_KEY, or run wandb.login() in a cell"; exit 1
   fi
   "$VENV/bin/python" -c "import wandb" 2>/dev/null || uv pip install -q --python "$VENV/bin/python" wandb
-  echo "logging to CoreWeave Forge (W&B): project=$WANDB_PROJECT entity=${WANDB_ENTITY:-<your default>}"
+  # Log only the reproduction results: no automatic GPU memory / power / CPU charts.
+  export WANDB_X_DISABLE_STATS=true
+  echo "logging to CoreWeave Forge (W&B): project=$WANDB_PROJECT entity=${WANDB_ENTITY:-<your default>} (system metrics off)"
 else
   echo "W&B / Forge logging off (run the Forge cell to turn it on)"
 fi

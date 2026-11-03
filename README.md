@@ -42,7 +42,14 @@ Then:
 - **Cell 8** uploads a `results-summary` run with the table "ours vs. paper" (mean ± std over seeds),
   a per-run table, and an "ours vs. paper" bar chart for full-schedule runs.
 
-Project URL: `https://forge.coreweave.com/wandb/<entity>/<project>`.
+- Cell 8 also builds the Forge **report "RSOD reproduction on UATD (sonar object detection)"**
+  (`tools/forge_report.py`): ours-vs-paper tables, test mAP per run, training loss / lr curves and
+  validation mAP. It contains only reproduction results; W&B's automatic system charts (GPU memory,
+  power) are switched off for our runs (`WANDB_X_DISABLE_STATS=true`).
+- Runs that finished before logging was switched on are uploaded once from their saved logs
+  (`tools/backfill_forge.py`, tagged `backfilled`).
+
+Project URL: `https://forge.coreweave.com/wandb/<entity>/<project>`; the report is under the project's Reports tab.
 Under the hood this is the standard `wandb` library (MMEngine's `WandbVisBackend`); Forge serves the W&B app,
 and the `api.wandb.ai` endpoint keeps working, so nothing else needs configuring.
 

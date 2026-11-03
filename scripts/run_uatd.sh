@@ -44,6 +44,7 @@ for pct in $PCTS; do
       WANDB_NAME=${name}-test WANDB_RUN_ID=${name}-test WANDB_JOB_TYPE=eval \
         python tools/test.py "$cfg" "$ckpt" --work-dir "$wd" "${extra[@]}"
       date > "$wd/DONE"
+      if [ -n "${WANDB_PROJECT:-}" ]; then touch "$wd/FORGE_LOGGED"; fi  # live-logged; no backfill needed
     done
   done
 done

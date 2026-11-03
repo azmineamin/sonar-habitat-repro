@@ -47,6 +47,9 @@ def main(argv=None):
     a = ap.parse_args(argv)
 
     rows, groups = [], defaultdict(list)
+    if not Path(a.work_root).is_dir():
+        raise SystemExit(f'No runs found: {a.work_root} does not exist. Training has not started '
+                         '(or failed before its first log); check the output of the training cell.')
     for d in sorted(Path(a.work_root).iterdir()):
         m = NAME_RE.search(d.name)
         if not d.is_dir() or not m:

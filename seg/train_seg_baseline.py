@@ -148,6 +148,7 @@ def main():
     ap.add_argument('--workers', type=int, default=4)
     ap.add_argument('--out', required=True)
     ap.add_argument('--no-pretrained', action='store_true')
+    ap.add_argument('--init-encoder', default=None, help='encoder.pt from train_ssl.py (SSL-pretrained ResNet-34)')
     a = ap.parse_args()
 
     random.seed(a.seed); np.random.seed(a.seed); torch.manual_seed(a.seed)
@@ -167,7 +168,11 @@ def main():
     tl = torch.utils.data.DataLoader(tr, a.batch, shuffle=True, num_workers=a.workers, drop_last=len(tr) > a.batch,
                                      pin_memory=device == 'cuda', persistent_workers=a.workers > 0)
     el = torch.utils.data.DataLoader(te, a.batch, shuffle=False, num_workers=a.workers)
-    model = UNetR34(NUM_CLASSES, pretrained=not a.no_pretrained).to(device)
+    model = UNetR34(NUM_CLASSES, pretrained=not a.no_pretrained and not a.init_encoder).to(device)
+    if a.init_encoder:
+        res = model.load_state_dict(torch.load(a.init_encoder, map_location='cpu'), strict=False)
+        assert not res.unexpected_keys and all(k.split('.')[0] in ('dec', 'head') for k in res.missing_keys), res
+        print('loaded SSL encoder from', a.init_encoder, flush=True)
     opt = torch.optim.AdamW(model.parameters(), lr=a.lr, weight_decay=1e-4)
     sched = torch.optim.lr_scheduler.OneCycleLR(opt, max_lr=a.lr, total_steps=a.iters, pct_start=0.05)
     scaler = torch.amp.GradScaler(enabled=device == 'cuda')

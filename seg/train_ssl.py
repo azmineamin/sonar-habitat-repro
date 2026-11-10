@@ -16,7 +16,7 @@ two views of each tile, a cheap proxy for representation quality.
 
 Usage (GPU):
     python seg/train_ssl.py --root /content/bc_pre --sectors N02 N03 N08 \
-        --val-sectors N03 --iters 20000 --batch 128 --out runs/ssl_r34
+        --val-sectors N03 --iters 8000 --batch 128 --view-size 224 --workers 2 --out runs/ssl_r34
 Re-running the same command resumes from <out>/last.pt (a finished run has a DONE marker).
 Smoke test: add --iters 20 --batch 8 --workers 0 --no-pretrained
 """
@@ -113,7 +113,7 @@ def nt_xent(z1, z2, temp=0.2):
 
 
 @torch.no_grad()
-def evaluate(model, loader, device, max_batches=20):
+def evaluate(model, loader, device, view_size=384, max_batches=20):
     model.eval()
     ls, accs = [], []
     for i, x in enumerate(loader):
@@ -122,7 +122,7 @@ def evaluate(model, loader, device, max_batches=20):
         x = x.to(device, non_blocking=True)
         if x.shape[0] < 4:
             continue
-        loss, acc = nt_xent(model(gpu_view(x)), model(gpu_view(x)))
+        loss, acc = nt_xent(model(gpu_view(x, view_size)), model(gpu_view(x, view_size)))
         ls.append(loss.item()); accs.append(acc.item())
     model.train()
     return dict(loss=float(np.mean(ls)) if ls else None, top1=float(np.mean(accs)) if accs else None)
@@ -144,6 +144,7 @@ def main():
     ap.add_argument('--iters', type=int, default=20000)
     ap.add_argument('--batch', type=int, default=128)
     ap.add_argument('--lr', type=float, default=3e-4)
+    ap.add_argument('--view-size', type=int, default=384, help='side of the augmented crops fed to the network (224 is ~3x faster than 384)')
     ap.add_argument('--temp', type=float, default=0.2)
     ap.add_argument('--eval-every', type=int, default=1000)
     ap.add_argument('--workers', type=int, default=4)
@@ -196,6 +197,10 @@ def main():
         print('DONE marker found, nothing to do:', out); return
     if ck.exists():
         c = torch.load(ck, map_location=device)
+        cfg = c.get('cfg', {})
+        if cfg and (cfg.get('iters'), cfg.get('view_size'), cfg.get('batch')) != (args.iters, args.view_size, args.batch):
+            sys.exit(f'{ck} was made with {cfg}; this run uses iters={args.iters}, view_size={args.view_size}, '
+                     f'batch={args.batch}. Use the same settings to resume, or a new --out folder.')
         model.load_state_dict(c['model']); opt.load_state_dict(c['opt'])
         sched.load_state_dict(c['sched']); scaler.load_state_dict(c['scaler'])
         start, log = c['step'], c.get('log', [])
@@ -204,7 +209,7 @@ def main():
     for step in range(start + 1, args.iters + 1):
         x = next(it).to(device, non_blocking=True)
         with torch.autocast(device_type='cuda', enabled=(device == 'cuda')):
-            z1, z2 = model(gpu_view(x)), model(gpu_view(x))
+            z1, z2 = model(gpu_view(x, args.view_size)), model(gpu_view(x, args.view_size))
         loss, acc = nt_xent(z1.float(), z2.float(), args.temp)
         opt.zero_grad(set_to_none=True)
         scaler.scale(loss).backward(); scaler.step(opt); scaler.update(); sched.step()
@@ -214,11 +219,12 @@ def main():
         if step % args.eval_every == 0 or step == args.iters:
             rec = dict(step=step, train_loss=loss.item(), train_top1=acc.item())
             if vl is not None:
-                rec['val'] = evaluate(model, vl, device)
+                rec['val'] = evaluate(model, vl, device, args.view_size)
             log.append(rec); print('eval', rec, flush=True)
             torch.save(model.encoder.state_dict(), out / 'encoder.pt')
             torch.save(dict(model=model.state_dict(), opt=opt.state_dict(), sched=sched.state_dict(),
-                            scaler=scaler.state_dict(), step=step, log=log), ck.with_suffix('.tmp'))
+                            scaler=scaler.state_dict(), step=step, log=log,
+                            cfg=dict(iters=args.iters, view_size=args.view_size, batch=args.batch)), ck.with_suffix('.tmp'))
             ck.with_suffix('.tmp').replace(ck)  # atomic: a disconnect mid-save cannot corrupt last.pt
             (out / 'log.json').write_text(json.dumps(log, indent=1))
         if args.stop_after and step >= args.stop_after and step < args.iters:

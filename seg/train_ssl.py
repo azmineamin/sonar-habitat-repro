@@ -148,14 +148,20 @@ def main():
     ap.add_argument('--eval-every', type=int, default=1000)
     ap.add_argument('--workers', type=int, default=4)
     ap.add_argument('--seed', type=int, default=1)
+    ap.add_argument('--allow-cpu', action='store_true', help='run on CPU (smoke tests only)')
     ap.add_argument('--stop-after', type=int, default=0, help='debug: exit after this step (simulates a crash)')
     ap.add_argument('--out', required=True)
     ap.add_argument('--no-pretrained', action='store_true', help='random init instead of ImageNet weights')
     args = ap.parse_args()
 
+    if args.iters < 6:
+        sys.exit('--iters must be at least 6 (one-cycle LR schedule needs a few steps)')
     random.seed(args.seed); np.random.seed(args.seed); torch.manual_seed(args.seed)
     out = Path(args.out); out.mkdir(parents=True, exist_ok=True)
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    if device == 'cpu' and not args.allow_cpu:
+        sys.exit('No GPU found. In Colab: Runtime > Change runtime type > T4 GPU, then re-run '
+                 '(add --allow-cpu to force CPU, only sensible for tiny smoke tests).')
 
     root = Path(args.root)
     dirs = [root / s for s in args.sectors] if args.sectors else [root]
@@ -180,7 +186,8 @@ def main():
 
     model = SimCLR(pretrained=not args.no_pretrained).to(device)
     opt = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=1e-4)
-    sched = torch.optim.lr_scheduler.OneCycleLR(opt, max_lr=args.lr, total_steps=args.iters, pct_start=0.05)
+    sched = torch.optim.lr_scheduler.OneCycleLR(opt, max_lr=args.lr, total_steps=args.iters,
+                                                pct_start=min(0.5, max(0.05, 3.0 / args.iters)))  # >=3 warm-up steps, even for tiny smoke runs
     scaler = torch.amp.GradScaler('cuda', enabled=(device == 'cuda'))
 
     log, t0, start = [], time.time(), 0

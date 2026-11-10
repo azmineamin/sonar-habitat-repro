@@ -19,7 +19,7 @@ and tests on **unseen survey sectors**. Baselines to beat: supervised U-Net at 1
   - `BenthiCat_pretrain_inspect.ipynb`: list, download and inspect a few SSS Pre-training sectors
 - `tools/`: `uatd_to_coco.py`, `make_ssod_splits.py`, `gen_rsod_configs.py`, `collect_results.py`, `forge_report.py`, `backfill_forge.py`
 - `scripts/`: `run_uatd.sh` (resume-safe), `run_seg_baselines.sh`
-- `seg/`: `benthicat_common.py`, `benthicat_inspect.py`, `pretrain_data.py` (SSL tile loader, waterfall-level split; tested with `tests/test_pretrain_data.py`), `train_ssl.py` (SimCLR ResNet-34 pretraining, writes `encoder.pt`; smoke-tested on CPU with synthetic tiles only, never on real data or GPU), `train_seg_baseline.py` (`--init-encoder encoder.pt` loads it; U-Net ResNet-34, 384x384, stride 192).
+- `seg/`: `benthicat_common.py`, `benthicat_inspect.py`, `pretrain_data.py` (SSL tile loader, waterfall-level split; tested with `tests/test_pretrain_data.py`), `train_ssl.py` (SimCLR ResNet-34 pretraining, writes `encoder.pt`, resumes from `last.pt`; smoke-tested on CPU with synthetic tiles only, never on real data or GPU), `train_seg_baseline.py` (`--init-encoder encoder.pt` loads it; U-Net ResNet-34, 384x384, stride 192).
   **Written from paper assumptions. The real BenthiCat file layout and mask encoding are unverified. Never run on real data. Fix after inspecting real tiles.**
 - `targets/paper_targets.csv`: RSOD paper numbers. `README.md`: deviations from the paper.
 

@@ -17,6 +17,7 @@ two views of each tile, a cheap proxy for representation quality.
 Usage (GPU):
     python seg/train_ssl.py --root /content/bc_pre --sectors N02 N03 N08 \
         --val-sectors N03 --iters 20000 --batch 128 --out runs/ssl_r34
+Re-running the same command resumes from <out>/last.pt (a finished run has a DONE marker).
 Smoke test: add --iters 20 --batch 8 --workers 0 --no-pretrained
 """
 import argparse
@@ -147,6 +148,7 @@ def main():
     ap.add_argument('--eval-every', type=int, default=1000)
     ap.add_argument('--workers', type=int, default=4)
     ap.add_argument('--seed', type=int, default=1)
+    ap.add_argument('--stop-after', type=int, default=0, help='debug: exit after this step (simulates a crash)')
     ap.add_argument('--out', required=True)
     ap.add_argument('--no-pretrained', action='store_true', help='random init instead of ImageNet weights')
     args = ap.parse_args()
@@ -181,9 +183,18 @@ def main():
     sched = torch.optim.lr_scheduler.OneCycleLR(opt, max_lr=args.lr, total_steps=args.iters, pct_start=0.05)
     scaler = torch.amp.GradScaler('cuda', enabled=(device == 'cuda'))
 
-    log, t0 = [], time.time()
+    log, t0, start = [], time.time(), 0
+    ck = out / 'last.pt'
+    if (out / 'DONE').exists():
+        print('DONE marker found, nothing to do:', out); return
+    if ck.exists():
+        c = torch.load(ck, map_location=device)
+        model.load_state_dict(c['model']); opt.load_state_dict(c['opt'])
+        sched.load_state_dict(c['sched']); scaler.load_state_dict(c['scaler'])
+        start, log = c['step'], c.get('log', [])
+        print(f'resumed from {ck} at step {start}', flush=True)
     it = infinite(tl)
-    for step in range(1, args.iters + 1):
+    for step in range(start + 1, args.iters + 1):
         x = next(it).to(device, non_blocking=True)
         with torch.autocast(device_type='cuda', enabled=(device == 'cuda')):
             z1, z2 = model(gpu_view(x)), model(gpu_view(x))
@@ -199,8 +210,12 @@ def main():
                 rec['val'] = evaluate(model, vl, device)
             log.append(rec); print('eval', rec, flush=True)
             torch.save(model.encoder.state_dict(), out / 'encoder.pt')
-            torch.save(dict(model=model.state_dict(), opt=opt.state_dict(), step=step), out / 'last.pt')
+            torch.save(dict(model=model.state_dict(), opt=opt.state_dict(), sched=sched.state_dict(),
+                            scaler=scaler.state_dict(), step=step, log=log), ck.with_suffix('.tmp'))
+            ck.with_suffix('.tmp').replace(ck)  # atomic: a disconnect mid-save cannot corrupt last.pt
             (out / 'log.json').write_text(json.dumps(log, indent=1))
+        if args.stop_after and step >= args.stop_after and step < args.iters:
+            print('stopping early (debug) at step', step); return
     (out / 'DONE').write_text('ok')
     print('done ->', out / 'encoder.pt')
 

@@ -43,6 +43,10 @@ Speed on a T4: about 1.3 s/iter supervised, about 3.4 s/iter RSOD.
 - `seg/benthicat_common.py` `load_array` and `to_unit_float` already handle this format. Segmentation mask encoding is still unverified (no labelled data released).
 - Local download from Dataverse works with a browser User-Agent (no 403); it is slow (~50-500 KB/s). 7-Zip is at `C:\Program Files-Zipz.exe`; system Python has no numpy (use `uv run --with numpy`).
 
+## SSL run 1 (Colab T4, done)
+SimCLR ResNet-34, sectors N02/N03/N08, N03 held out, 224 px crops, batch 128, 8,000 iters (~89 min, 0.66 s/iter; 384 px was 1.75 s/iter). Encoder: `MyDrive/benthicat/ssl_r34_v224/encoder.pt`.
+Retrieval top-1: train ~0.97, unseen-sector val 0.52 (chance <1 %). Proxy only; downstream segmentation vs ImageNet init is untested. The unshuffled val loader used during the run gave misleading 0.30-0.49 numbers (fixed since).
+
 ## Next steps
 1. Done: tile format inspected (see above). Cell 5 of `colab/BenthiCat_pretrain_inspect.ipynb` repeats that check on Colab.
 2. Done: `seg/pretrain_data.py` loader. Done: `seg/train_ssl.py` (SimCLR). Next: run it on Colab (GPU) on N02/N03/N08, then compare against ImageNet init once labels exist. Fix `seg/` mask handling if labels arrive.

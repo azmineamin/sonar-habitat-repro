@@ -113,7 +113,7 @@ def nt_xent(z1, z2, temp=0.2):
 
 
 @torch.no_grad()
-def evaluate(model, loader, device, view_size=384, max_batches=20):
+def evaluate(model, loader, device, view_size=384, max_batches=40):
     model.eval()
     ls, accs = [], []
     for i, x in enumerate(loader):
@@ -149,6 +149,7 @@ def main():
     ap.add_argument('--eval-every', type=int, default=1000)
     ap.add_argument('--workers', type=int, default=4)
     ap.add_argument('--seed', type=int, default=1)
+    ap.add_argument('--eval-only', action='store_true', help='score <out>/last.pt on the validation split and exit')
     ap.add_argument('--allow-cpu', action='store_true', help='run on CPU (smoke tests only)')
     ap.add_argument('--stop-after', type=int, default=0, help='debug: exit after this step (simulates a crash)')
     ap.add_argument('--out', required=True)
@@ -178,12 +179,14 @@ def main():
         val_waterfalls=sorted({t[1]['waterfall'] for t in val})), indent=1))
 
     ident = lambda a, rng: a  # noqa: E731  (augmentation happens on GPU)
-    mk = lambda ts, shuffle: torch.utils.data.DataLoader(  # noqa: E731
-        SSLTileDataset(ts, 1, 1, view_fn=ident), batch_size=args.batch, shuffle=shuffle,
-        num_workers=args.workers, drop_last=shuffle, pin_memory=(device == 'cuda'),
+    mk = lambda ts, drop: torch.utils.data.DataLoader(  # noqa: E731
+        SSLTileDataset(ts, 1, 1, view_fn=ident), batch_size=args.batch, shuffle=True,
+        num_workers=args.workers, drop_last=drop, pin_memory=(device == 'cuda'),
         persistent_workers=args.workers > 0)
+    # Both loaders shuffle: an unshuffled val loader puts neighbouring (near-identical) tiles in one
+    # batch, which makes the retrieval proxy much harder than in training and not comparable.
     tl = mk(train, True)
-    vl = mk(val, False) if val else None
+    vl = mk(val, True) if val else None
 
     model = SimCLR(pretrained=not args.no_pretrained).to(device)
     opt = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=1e-4)
@@ -193,6 +196,13 @@ def main():
 
     log, t0, start = [], time.time(), 0
     ck = out / 'last.pt'
+    if args.eval_only:
+        if vl is None or not ck.exists():
+            sys.exit('--eval-only needs a validation split and <out>/last.pt')
+        model.load_state_dict(torch.load(ck, map_location=device)['model'])
+        random.seed(0); torch.manual_seed(0)
+        print('eval-only on', len(val), 'val tiles:', evaluate(model, vl, device, args.view_size, max_batches=10 ** 9))
+        return
     if (out / 'DONE').exists():
         print('DONE marker found, nothing to do:', out); return
     if ck.exists():

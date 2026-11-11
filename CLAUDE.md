@@ -19,7 +19,7 @@ and tests on **unseen survey sectors**. Baselines to beat: supervised U-Net at 1
   - `BenthiCat_pretrain_inspect.ipynb`: list, download and inspect a few SSS Pre-training sectors
 - `tools/`: `uatd_to_coco.py`, `make_ssod_splits.py`, `gen_rsod_configs.py`, `collect_results.py`, `forge_report.py`, `backfill_forge.py`
 - `scripts/`: `run_uatd.sh` (resume-safe), `run_seg_baselines.sh`
-- `seg/`: `benthicat_common.py`, `benthicat_inspect.py`, `pretrain_data.py` (SSL tile loader, waterfall-level split; tested with `tests/test_pretrain_data.py`), `train_ssl.py` (SimCLR ResNet-34 pretraining, writes `encoder.pt`, resumes from `last.pt`; smoke-tested on CPU with synthetic tiles only, never on real data or GPU), `train_seg_baseline.py` (`--init-encoder encoder.pt` loads it; U-Net ResNet-34, 384x384, stride 192).
+- `seg/`: `benthicat_common.py`, `benthicat_inspect.py`, `pretrain_data.py` (SSL tile loader, waterfall-level split; tested with `tests/test_pretrain_data.py`), `train_ssl.py` (SimCLR ResNet-34 pretraining, writes `encoder.pt`, resumes from `last.pt`; smoke-tested on CPU with synthetic tiles only, never on real data or GPU), `dse.py` (label-free checkpoint selection, NeurIPS 2025 DSE of Dai et al., arXiv:2510.17299; unit-tested, never run on real checkpoints), `train_seg_baseline.py` (`--init-encoder encoder.pt` loads it; U-Net ResNet-34, 384x384, stride 192).
   **Written from paper assumptions. The real BenthiCat file layout and mask encoding are unverified. Never run on real data. Fix after inspecting real tiles.**
 - `targets/paper_targets.csv`: RSOD paper numbers. `README.md`: deviations from the paper.
 
@@ -46,6 +46,12 @@ Speed on a T4: about 1.3 s/iter supervised, about 3.4 s/iter RSOD.
 ## SSL run 1 (Colab T4, done)
 SimCLR ResNet-34, sectors N02/N03/N08, N03 held out, 224 px crops, batch 128, 8,000 iters (~89 min, 0.66 s/iter; 384 px was 1.75 s/iter). Encoder: `MyDrive/benthicat/ssl_r34_v224/encoder.pt`.
 Retrieval top-1: train ~0.97, unseen-sector val 0.52 (chance <1 %). Proxy only; downstream segmentation vs ImageNet init is untested. The unshuffled val loader used during the run gave misleading 0.30-0.49 numbers (fixed since).
+
+## Methods adopted (A/A*, 2025/2026)
+- RSOD (Li, Guo et al., AAAI 2026): reliability idea, to be extended to pixels.
+- DSE (Dai, Xu, Wen, Liu, Huang, NeurIPS 2025, arXiv:2510.17299): `seg/dse.py`, label-free SSL checkpoint selection (their Algorithm 1). Open choices of ours: layer4 features, k=12, image counts; no DSE regulariser.
+- CSL (Liu & Liu, ICCV 2025, doi 10.1109/ICCV51701.2025.02031, code github.com/PanLiuCSU/CSL): pseudo-label selection for semi-supervised segmentation. Candidate for the labelled phase; needs masks, and public BenthiCat has none (SSS-CAM has no annotations; Raw is 369 GB of raw data plus GIS maps).
+- Not usable under the venue rule: Mine-JEPA (CVPR 2026 workshop), LeJEPA (preprint), SimCLR (2020, our current SSL baseline).
 
 ## Next steps
 1. Done: tile format inspected (see above). Cell 5 of `colab/BenthiCat_pretrain_inspect.ipynb` repeats that check on Colab.

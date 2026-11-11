@@ -149,6 +149,7 @@ def main():
     ap.add_argument('--eval-every', type=int, default=1000)
     ap.add_argument('--workers', type=int, default=4)
     ap.add_argument('--seed', type=int, default=1)
+    ap.add_argument('--snapshot-every', type=int, default=0, help='also keep <out>/snapshots/enc_<step>.pt every N iterations (for dse.py checkpoint selection)')
     ap.add_argument('--eval-only', action='store_true', help='score <out>/last.pt on the validation split and exit')
     ap.add_argument('--allow-cpu', action='store_true', help='run on CPU (smoke tests only)')
     ap.add_argument('--stop-after', type=int, default=0, help='debug: exit after this step (simulates a crash)')
@@ -232,6 +233,9 @@ def main():
                 rec['val'] = evaluate(model, vl, device, args.view_size)
             log.append(rec); print('eval', rec, flush=True)
             torch.save(model.encoder.state_dict(), out / 'encoder.pt')
+            if args.snapshot_every and step % args.snapshot_every == 0:
+                (out / 'snapshots').mkdir(exist_ok=True)
+                torch.save(model.encoder.state_dict(), out / 'snapshots' / f'enc_{step:06d}.pt')
             torch.save(dict(model=model.state_dict(), opt=opt.state_dict(), sched=sched.state_dict(),
                             scaler=scaler.state_dict(), step=step, log=log,
                             cfg=dict(iters=args.iters, view_size=args.view_size, batch=args.batch)), ck.with_suffix('.tmp'))
